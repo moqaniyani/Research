@@ -1,0 +1,34 @@
+<Sysmon schemaversion="4.30">
+  <EventFiltering>
+  
+    <RuleGroup groupRelation="or" name="Threat Hunting: Unauthorized Monitoring Agents">
+      <ProcessCreate onmatch="include">
+        <Image condition="end with">\aeagent.exe</Image>
+        <Image condition="end with">\nmep_ctrlagent.exe</Image>
+      </ProcessCreate>
+      
+      <ProcessCreate onmatch="exclude">
+        <Image condition="begin with">C:\Windows\System32\</Image>
+        <Image condition="begin with">C:\Program Files\ManageEngine\</Image>
+        <Image condition="begin with">C:\Program Files (x86)\ManageEngine\</Image>
+      </ProcessCreate>
+    </RuleGroup>
+
+    <RuleGroup groupRelation="or" name="Network Hunting: Monitoring Agent C2 Infrastructure">
+      <NetworkConnect onmatch="include">
+        <DestinationHostname condition="contains">networklookout.com</DestinationHostname>
+        
+        <DestinationPort condition="is">800</DestinationPort>
+        <DestinationPort condition="is">801</DestinationPort>
+        <DestinationPort condition="is">802</DestinationPort>
+        <DestinationPort condition="is">824</DestinationPort>
+        <DestinationPort condition="is">825</DestinationPort>
+      </NetworkConnect>
+      
+      <NetworkConnect onmatch="exclude">
+        <Image condition="begin with">C:\Windows\System32\svchost.exe</Image>
+      </NetworkConnect>
+    </RuleGroup>
+
+  </EventFiltering>
+</Sysmon>
