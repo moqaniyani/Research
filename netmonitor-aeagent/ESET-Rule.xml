@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rule>
+    <description>
+        <name>Incident Response: Unauthorized Monitoring Agent (aeagent/nmep) Detected - By Milad Moqaniyani</name>
+        <category>Defense Evasion</category>
+        <os>Windows</os>
+        <severity>70</severity>
+        <mitreattackid>T1036.005</mitreattackid>
+        <explanation><![CDATA[
+        Detects unauthorized monitoring agents masquerading as aeagent.exe or running as nmep_ctrlagent.exe outside System32. It monitors outbound network behaviors on C2 infrastructure and specific non-standard ports.
+        ]]></explanation>
+        <benignCauses>ManageEngine AssetExplorer remote agent running from official administrative paths.</benignCauses>
+        <maliciousCauses>Defense evasion by renaming spyware to blend in with legitimate enterprise IT monitoring tools.</maliciousCauses>
+        <recommendedActions>Isolate the machine from the network immediately, kill the offending process, and perform a full password reset.</recommendedActions>
+    </description>
+    <definition>
+        <process>
+            <operator type="AND">
+                <operator type="OR">
+                    <condition component="FileItem" property="FileName" condition="is" value="aeagent.exe" />
+                    <condition component="FileItem" property="FileName" condition="is" value="nmep_ctrlagent.exe" />
+                </operator>
+                <operator type="NOT">
+                    <condition component="FileItem" property="Path" condition="starts" value="C:\Windows\System32\" />
+                </operator>
+            </operator>
+        </process>
+        <operations>
+            <operation type="TcpIpConnect">
+                <!-- لایه اصلی شبکه با OR: یا دامنه مخرب، یا پورت‌های مخرب -->
+                <operator type="OR">
+                    <!-- شرط اول: اتصال به دامنه مخرب (روی هر پورتی باشد شکارش کن) -->
+                    <condition component="Network" property="Hostname" condition="contains" value="networklookout.com" />
+                    <!-- شرط دوم: اتصال به پورت‌های خاصِ Port Hopping (به هر مقصدی) -->
+                    <operator type="OR">
+                        <condition component="Network" property="Port" condition="is" value="800" />
+                        <condition component="Network" property="Port" condition="is" value="801" />
+                        <condition component="Network" property="Port" condition="is" value="802" />
+                        <condition component="Network" property="Port" condition="is" value="824" />
+                        <condition component="Network" property="Port" condition="is" value="825" />
+                    </operator>
+                </operator>
+            </operation>
+        </operations>
+    </definition>
+    <actions>
+        <action name="TriggerDetection" />
+        <action name="KillProcess" />
+        <action name="BlockProcessExecutable" />
+        <action name="IsolateFromNetwork" />
+    </actions>
+    <maliciousTarget name="current" />
+</rule>
