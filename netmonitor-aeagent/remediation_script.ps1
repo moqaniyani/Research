@@ -5,6 +5,8 @@
 .DESCRIPTION
     This script dynamically tracks and terminates suspected processes, deletes associated 
     Windows services, purges binary files from the disk, and enforces strict firewall block rules.
+
+    Developed by Milad Moqaniyani...
 #>
 
 $ErrorActionPreference = "Stop"
