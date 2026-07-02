@@ -1,0 +1,34 @@
+<group name="windows,sysmon,threat_hunting,">
+
+  <rule id="100050" level="12">
+    <if_sid>61603</if_sid> <field name="win.eventdata.image">aeagent.exe|nmep_ctrlagent.exe</field>
+    <description>Incident Response: Unauthorized Monitoring Agent ($(win.eventdata.image)) Executed</description>
+    <mitre>
+      <id>T1036.005</id>
+    </mitre>
+    <group>defense_evasion,process_creation</group>
+  </rule>
+
+  <rule id="100051" level="0">
+    <if_sid>100050</if_sid>
+    <field name="win.eventdata.image">^C:\\Windows\\System32\\|^C:\\Program Files\\ManageEngine\\|^C:\\Program Files \(x86\)\\ManageEngine\\</field>
+    <description>Ignore legitimate ManageEngine AssetExplorer or System paths</description>
+  </rule>
+
+  <rule id="100052" level="12">
+    <if_sid>61605</if_sid> <field name="win.eventdata.destinationHostname">networklookout.com</field>
+    <field name="win.eventdata.destinationPort">^800$|^801$|^802$|^824$|^825$</field>
+    <description>Incident Response: Unauthorized Monitoring Agent Network Activity Detected (Port/Domain Match)</description>
+    <mitre>
+      <id>T1043</id>
+    </mitre>
+    <group>command_and_control,network_connection</group>
+  </rule>
+
+  <rule id="100053" level="0">
+    <if_sid>100052</if_sid>
+    <field name="win.eventdata.image">^C:\\Windows\\System32\\svchost.exe</field>
+    <description>Ignore legitimate Windows svchost network traffic on these ports</description>
+  </rule>
+
+</group>
