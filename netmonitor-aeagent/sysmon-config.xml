@@ -1,3 +1,4 @@
+<!-- This Config Not Tested --!>
 <Sysmon schemaversion="4.30">
   <EventFiltering>
   
