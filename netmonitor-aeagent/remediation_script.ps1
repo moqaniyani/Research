@@ -1,61 +1,99 @@
 <#
 .SYNOPSIS
-    اسکریپت پاک‌سازی و ریشه‌کنی ابزار نظارتی غیرمجاز (Net Monitor for Employees Pro)
-    شناسه پردازش هدف: 5068 | پورت هدف: 4495
+    Dynamic Remediation and Eradication Script for Unauthorized Monitoring Tool (Net Monitor for Employees Pro)
+    Target: Automated PID Discovery based on Process Names and Network Port 4495
 .DESCRIPTION
-    این اسکریپت فرآیندهای مشکوک را متوقف کرده، سرویس‌های ویندوزی مرتبط را حذف،
-    فایل‌های باینری را پاک‌سازی و پورت فایروال را مسدود می‌کند.
+    This script dynamically tracks and terminates suspected processes, deletes associated 
+    Windows services, purges binary files from the disk, and enforces strict firewall block rules.
 #>
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "[*] شروع عملیات پاک‌سازی و ریشه‌کنی تهدید..." -ForegroundColor Cyan
+Write-Host "[*] Starting Intelligent Threat Eradication Script..." -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# ۱. متوقف کردن فرآیندهای مشکوک در حافظه
+# Array to collect all discovered suspicious PIDs
+$TargetPIDs = @()
+
+# A) Discover PIDs based on known process names
 $ProcessNames = @("nmep_ctrlagent", "nmep_agent", "nmep_ctrlagentsvc")
-foreach ($Proc in $ProcessNames) {
-    if (Get-Process -Name $Proc -ErrorAction SilentlyContinue) {
-        Write-Host "[!] فرآیند فعال یافت شد: $Proc. در حال متوقف کردن..." -ForegroundColor Yellow
-        Stop-Process -Name $Proc -Force
-        Write-Host "[+] فرآیند $Proc با موفقیت متوقف شد." -ForegroundColor Green
+foreach ($ProcName in $ProcessNames) {
+    $Procs = Get-Process -Name $ProcName -ErrorAction SilentlyContinue
+    if ($Procs) {
+        foreach ($P in $Procs) {
+            $TargetPIDs += $P.Id
+            Write-Host "[+] Process identified by name: $ProcName with ID (PID: $($P.Id))" -ForegroundColor Yellow
+        }
     }
 }
 
-# بررسی اختصاصی برای مطمئن شدن از خاتمه PID 5068
-if (Get-Process -Id 5068 -ErrorAction SilentlyContinue) {
-    Write-Host "[!] پردازش PID 5068 همچنان فعال است. توقف اجباری..." -ForegroundColor Yellow
-    Stop-Process -Id 5068 -Force
+# B) Discover PIDs based on Port 4495 activity (to capture renamed malicious binaries)
+try {
+    $NetworkConnections = Get-NetTCPConnection -LocalPort 4495 -ErrorAction SilentlyContinue
+    if ($NetworkConnections) {
+        foreach ($Conn in $NetworkConnections) {
+            if ($Conn.OwningProcess -and $Conn.OwningProcess -ne 0) {
+                $TargetPIDs += $Conn.OwningProcess
+                Write-Host "[+] Process identified by network port 4495 activity with ID (PID: $($Conn.OwningProcess))" -ForegroundColor Yellow
+            }
+        }
+    }
+} catch {
+    Write-Host "[-] Error encountered while scanning network connections on Port 4495." -ForegroundColor Red
 }
 
-# ۲. توقف و حذف سرویس‌های ویندوزی (از طریق ابزار SCM)
+# Remove duplicate entries from the gathered PID list
+$TargetPIDs = $TargetPIDs | Select-Object -Unique
+
+# 1. Enforce termination of all discovered active processes
+if ($TargetPIDs.Count -gt 0) {
+    Write-Host "[*] Terminating identified processes..." -ForegroundColor Cyan
+    foreach ($PID in $TargetPIDs) {
+        if (Get-Process -Id $PID -ErrorAction SilentlyContinue) {
+            try {
+                Stop-Process -Id $PID -Force
+                Write-Host "[+] Process with ID (PID: $PID) successfully terminated." -ForegroundColor Green
+            } catch {
+                Write-Host "[-] Failed to force terminate process with ID (PID: $PID)." -ForegroundColor Red
+            }
+        }
+    }
+} else {
+    Write-Host "[+] No active target processes found in memory." -ForegroundColor Green
+}
+
+# 2. Stop and Delete Windows Services via Service Control Manager (SCM)
 $ServiceNames = @("nlnme_ctrlagent", "nmep_ctrlagent", "nmep_agent", "NetMonitorEmployees")
 foreach ($Svc in $ServiceNames) {
     if (Get-Service -Name $Svc -ErrorAction SilentlyContinue) {
-        Write-Host "[!] سرویس یافت شد: $Svc. در حال توقف و حذف..." -ForegroundColor Yellow
-        Stop-Service -Name $Svc -Force -ErrorAction SilentlyContinue
-        sc.exe delete $Svc | Out-Null
-        Write-Host "[+] سرویس با موفقیت حذف شد: $Svc" -ForegroundColor Green
+        Write-Host "[!] Target service found: $Svc. Stopping and removing..." -ForegroundColor Yellow
+        try {
+            Stop-Service -Name $Svc -Force -ErrorAction SilentlyContinue
+            sc.exe delete $Svc | Out-Null
+            Write-Host "[+] Service successfully deleted: $Svc" -ForegroundColor Green
+        } catch {
+            Write-Host "[-] Error occurred while removing service: $Svc" -ForegroundColor Red
+        }
     }
 }
 
-# ۳. پاک‌سازی و مسدودسازی پورت شبکه (4495)
-Write-Host "[*] در حال بررسی و پاک‌سازی قوانین فایروال برای پورت 4495..." -ForegroundColor Cyan
+# 3. Clean and Block Network Port 4495
+Write-Host "[*] Auditing and removing old firewall rules for Port 4495..." -ForegroundColor Cyan
 $BadRules = Get-NetFirewallRule | Where-Object {$_.DisplayName -like "*Net Monitor*" -or $_.DisplayName -like "*nmep*" -or $_.DisplayName -like "*nlnme*"}
 if ($BadRules) {
     foreach ($Rule in $BadRules) {
         Remove-NetFirewallRule -Name $Rule.Name
-        Write-Host "[+] قانون فایروال قدیمی حذف شد: $($Rule.DisplayName)" -ForegroundColor Green
+        Write-Host "[+] Removed legacy firewall rule: $($Rule.DisplayName)" -ForegroundColor Green
     }
 }
 
-Write-Host "[*] ایجاد قانون مسدودسازی قطعی (Explicit Block) برای پورت 4495..." -ForegroundColor Cyan
+Write-Host "[*] Creating explicit inbound/outbound BLOCK rules for Port 4495..." -ForegroundColor Cyan
 New-NetFirewallRule -DisplayName "BLOCK_Unauthorized_4495_In" -Direction Inbound -LocalPort 4495 -Protocol TCP -Action Block | Out-Null
 New-NetFirewallRule -DisplayName "BLOCK_Unauthorized_4495_Out" -Direction Outbound -LocalPort 4495 -Protocol TCP -Action Block | Out-Null
-Write-Host "[+] پورت 4495 در هر دو جهت ورودی و خروجی مسدود شد." -ForegroundColor Green
+Write-Host "[+] Port 4495 has been successfully blocked in both directions." -ForegroundColor Green
 
-# ۴. حذف فایل‌های باینری و پوشه‌های باقی‌مانده روی دیسک
+# 4. Purge Binary Files and Remaining Folders from Disk
 $TargetPaths = @(
     "C:\Windows\SysWOW64\nlnme",
     "C:\Windows\System32\nlnme",
@@ -66,12 +104,16 @@ $TargetPaths = @(
 
 foreach ($Path in $TargetPaths) {
     if (Test-Path $Path) {
-        Write-Host "[!] پوشه باقی‌مانده روی دیسک یافت شد: $Path. در حال حذف..." -ForegroundColor Yellow
-        Remove-Item -Path $Path -Recurse -Force
-        Write-Host "[+] پوشه با موفقیت حذف شد: $Path" -ForegroundColor Green
+        Write-Host "[!] Artifact folder found on disk: $Path. Deleting..." -ForegroundColor Yellow
+        try {
+            Remove-Item -Path $Path -Recurse -Force
+            Write-Host "[+] Folder successfully purged: $Path" -ForegroundColor Green
+        } catch {
+            Write-Host "[-] Error occurred while trying to delete folder: $Path" -ForegroundColor Red
+        }
     }
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "[+] عملیات ریشه‌کنی تهدید با موفقیت به پایان رسید!" -ForegroundColor Green
+Write-Host "[+] Threat eradication completed successfully!" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan
